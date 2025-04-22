@@ -1,2 +1,2 @@
-opencv-python-headless==4.7.0.72
-numpy>=1.22.0
+numpy==1.24.3  # Last 1.x version before 2.0
+opencv-python==4.8.0.74  # Or another stable version
