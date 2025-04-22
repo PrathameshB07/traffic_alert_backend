@@ -1158,6 +1158,7 @@ exports.processMediaUpload = async (req, res) => {
           phoneNumber: { $ne: null } // Only officials with phone numbers
         });
 
+        console.log("near by",nearbyOfficials)
         // Notify officials with the detailed text summary
         const notifiedOfficials = [];
         for (const official of nearbyOfficials) {
@@ -1171,12 +1172,13 @@ exports.processMediaUpload = async (req, res) => {
               cleanedResult.potentialEmergencyVehicles + ' possible emergency vehicles. ' : ''
             }Details: ${detectionLink}`;
             
+            console.log("sendeing")
             // Send SMS notification
             const smsResponse = await sendSmsNotification(
               official.phoneNumber,
               message
             );
-            
+            console.log("msg sent")
             // Save notification record
             const notification = new Notification({
               detection: detection._id,
@@ -1189,6 +1191,7 @@ exports.processMediaUpload = async (req, res) => {
             await notification.save();
             notifiedOfficials.push(official._id);
           } catch (err) {
+            
             console.error(`Failed to notify official ${official._id}:`, err);
           }
         }
