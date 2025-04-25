@@ -2937,11 +2937,12 @@ exports.getDetectionById = async (req, res) => {
 // Get user's detections with summaries
 exports.getUserDetections = async (req, res) => {
   const { userId } = req.body;
+  console.log("jhskjgkj")
   try {
     const detections = await Detection.find({ user: userId })
       .sort({ createdAt: -1 })
       .populate('notifiedOfficials', 'name badgeId')
-      .select('mediaUrl mediaType status createdAt textSummary visualizationUrl detectionResults.totalVehicles isAccident');
+      // .select('mediaUrl mediaType status createdAt textSummary visualizationUrl detectionResults.totalVehicles isAccident');
     
     res.json(detections);
   } catch (err) {
