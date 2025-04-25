@@ -2468,6 +2468,7 @@ const fs = require('fs');
 const os = require('os');
 const axios = require('axios');  // We'll still use axios for API requests
 require('dotenv').config();
+const {sendWhatsAppNotification}= require('../utils/twilioWhatsapp')
 
 // Configure Cloudinary
 cloudinary.config({
@@ -2507,101 +2508,73 @@ exports.upload = multer({
 });
 
 // Fetch nearby hospitals and ambulance services using Overpass API
-// Fetch nearby hospitals and ambulance services using Overpass API
+// Replace the fetchNearbyMedicalServices function with this implementation
 const fetchNearbyMedicalServices = async (latitude, longitude) => {
   try {
     // Define radius for search in meters
     const radius = 5000; // 5km radius
+    const tomtomApiKey = process.env.TOMTOM_API_KEY; // Add this to your .env file
     
-    // Overpass API query for hospitals
-    const hospitalQuery = `
-      [out:json];
-      (
-        node["amenity"="hospital"](around:${radius},${latitude},${longitude});
-        way["amenity"="hospital"](around:${radius},${latitude},${longitude});
-        relation["amenity"="hospital"](around:${radius},${latitude},${longitude});
-      );
-      out body;
-      >;
-      out skel qt;
-    `;
-    
-    // Overpass API query for ambulance services
-    const ambulanceQuery = `
-      [out:json];
-      (
-        node["emergency"="ambulance_station"](around:${radius},${latitude},${longitude});
-        way["emergency"="ambulance_station"](around:${radius},${latitude},${longitude});
-        relation["emergency"="ambulance_station"](around:${radius},${latitude},${longitude});
-      );
-      out body;
-      >;
-      out skel qt;
-    `;
-    
-    // Make requests to Overpass API
-    const hospitalsResponse = await axios.post(
-      'https://overpass-api.de/api/interpreter',
-      hospitalQuery,
+    // Fetch hospitals using TomTom Search API
+    const hospitalsResponse = await axios.get(
+      `https://api.tomtom.com/search/2/categorySearch/hospital.json`,
       {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+        params: {
+          key: tomtomApiKey,
+          lat: latitude,
+          lon: longitude,
+          radius,
+          limit: 5
         }
       }
     );
     
-    const ambulanceResponse = await axios.post(
-      'https://overpass-api.de/api/interpreter',
-      ambulanceQuery,
+    // Fetch ambulance services using TomTom Search API
+    const ambulanceResponse = await axios.get(
+      `https://api.tomtom.com/search/2/categorySearch/emergency-medical-service.json`,
       {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+        params: {
+          key: tomtomApiKey,
+          lat: latitude,
+          lon: longitude,
+          radius,
+          limit: 3
         }
       }
     );
     
     // Process hospital results
-    const hospitals = hospitalsResponse.data.elements
-      .filter(element => element.type === 'node' && element.tags) // Filter for nodes with tags
-      .map(h => ({
-        name: h.tags.name || 'Unnamed Hospital',
-        vicinity: h.tags.addr ? 
-          `${h.tags["addr:housenumber"] || ''} ${h.tags["addr:street"] || ''}`.trim() : 
-          'No address',
-        place_id: h.id.toString(),
-        location: {
-          lat: h.lat,
-          lng: h.lon
-        },
-        phone: h.tags.phone
-      }))
-      .slice(0, 5); // Limit to top 5
+    const hospitals = hospitalsResponse.data.results.map(h => ({
+      name: h.poi?.name || 'Unnamed Hospital',
+      vicinity: h.address?.freeformAddress || 'No address',
+      place_id: h.id,
+      location: {
+        lat: h.position?.lat,
+        lng: h.position?.lon
+      },
+      phone: h.poi?.phone
+    }));
     
     // Process ambulance results
-    const ambulances = ambulanceResponse.data.elements
-      .filter(element => element.type === 'node' && element.tags) // Filter for nodes with tags
-      .map(a => ({
-        name: a.tags.name || 'Ambulance Service',
-        vicinity: a.tags.addr ? 
-          `${a.tags["addr:housenumber"] || ''} ${a.tags["addr:street"] || ''}`.trim() : 
-          'No address',
-        place_id: a.id.toString(),
-        location: {
-          lat: a.lat,
-          lng: a.lon
-        },
-        phone: a.tags.phone
-      }))
-      .slice(0, 3); // Limit to top 3
+    const ambulances = ambulanceResponse.data.results.map(a => ({
+      name: a.poi?.name || 'Ambulance Service',
+      vicinity: a.address?.freeformAddress || 'No address',
+      place_id: a.id,
+      location: {
+        lat: a.position?.lat,
+        lng: a.position?.lon
+      },
+      phone: a.poi?.phone
+    }));
     
     return {
       hospitals,
       ambulances
     };
   } catch (error) {
-    console.error('Error fetching medical services:', error);
+    console.error('Error fetching medical services with TomTom API:', error);
     
-    // Fallback to Nominatim API if Overpass fails
+    // Fallback to Nominatim API as before
     try {
       // Fetch hospitals with Nominatim
       const hospitalsResponse = await axios.get(
@@ -2668,14 +2641,12 @@ const fetchNearbyMedicalServices = async (latitude, longitude) => {
         hospitals,
         ambulances
       };
-      
     } catch (fallbackError) {
       console.error('Fallback API also failed:', fallbackError);
       return { hospitals: [], ambulances: [] };
     }
   }
 };
-
 // Process media upload
 exports.processMediaUpload = async (req, res) => {
   try {
@@ -2855,11 +2826,8 @@ exports.processMediaUpload = async (req, res) => {
             console.log("Sending SMS to", official.phoneNumber);
             
             // Send SMS notification
-            const smsResponse = await sendSmsNotification(
-              official.phoneNumber,
-              message
-            );
-            
+            const smsResponse = await sendWhatsAppNotification(official.phoneNumber, message);
+
             console.log("SMS sent, SID:", smsResponse.sid);
             
             // Save notification record
