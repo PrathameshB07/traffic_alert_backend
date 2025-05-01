@@ -7,7 +7,10 @@ const {
   getDetectionById,
   getUserDetections,
   getOfficialNotifications,
-  markNotificationAsRead
+  markNotificationAsRead,
+  acceptTask,
+  rejectTask,
+  completeTask
 } = require('../controllers/detectionController');
 const { auth, officialAuth } = require('../middleware/auth');
 
@@ -36,4 +39,10 @@ router.get('/official/notifications', officialAuth, getOfficialNotifications);
 // @access  Private (Official)
 router.put('/notifications/:id/read', officialAuth, markNotificationAsRead);
 
+//changes
+
+// Task management routes
+router.put('/tasks/:detectionId/accept', auth, officialAuth, acceptTask);
+router.put('/tasks/:detectionId/reject', auth, officialAuth, rejectTask);
+router.put('/tasks/:detectionId/complete', auth, officialAuth, completeTask);
 module.exports = router;

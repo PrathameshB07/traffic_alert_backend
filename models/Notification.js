@@ -44,14 +44,19 @@ const notificationSchema = new mongoose.Schema({
   },
   smsMessageSid: String,
   notificationText: String,
-  status: {
-    type: String,
-    enum: ['sent', 'delivered', 'read', 'failed'],
-    default: 'sent'
-  },
+  // status: {
+  //   type: String,
+  //   enum: ['sent', 'delivered', 'read', 'failed'],
+  //   default: 'sent'
+  // },
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  status: {
+    type: String,
+    enum: ['sent', 'read', 'accepted', 'rejected', 'completed'],
+    default: 'sent'
   }
 });
 
