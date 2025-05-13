@@ -2647,239 +2647,6 @@ const fetchNearbyMedicalServices = async (latitude, longitude) => {
     }
   }
 };
-// // Process media upload
-// exports.processMediaUpload = async (req, res) => {
-//   try {
-//     if (!req.file) {
-//       return res.status(400).json({ msg: 'No file uploaded' });
-//     }
-    
-//     const { longitude, latitude, user, isAccident } = req.body;
-
-//     let userId;
-
-//     // Check if user is a string that needs parsing
-//     if (typeof user === 'string') {
-//       try {
-//         const parsedUser = JSON.parse(user);
-//         userId = parsedUser?._id;
-//       } catch (e) {
-//         // If not valid JSON, just use it directly
-//         userId = user;
-//       }
-//     } else if (user && user._id) {
-//       // If it's already an object
-//       userId = user._id;
-//     }
-    
-//     if (!longitude || !latitude) {
-//       return res.status(400).json({ msg: 'Location coordinates are required' });
-//     }
-    
-//     // Determine media type
-//     const mediaType = req.file.mimetype.startsWith('image/') ? 'image' : 'video';
-    
-//     // Upload to Cloudinary
-//     const folder = 'traffic-detection';
-//     const uploadResult = await cloudinary.uploader.upload(req.file.path, {
-//       resource_type: mediaType === 'image' ? 'image' : 'video',
-//       folder
-//     });
-    
-//     // Create detection record with accident flag
-//     const detection = new Detection({
-//       user: userId,
-//       mediaUrl: uploadResult.secure_url,
-//       mediaType,
-//       cloudinaryPublicId: uploadResult.public_id,
-//       location: {
-//         coordinates: [parseFloat(longitude), parseFloat(latitude)]
-//       },
-//       status: 'processing',
-//       isAccident: isAccident === 'true' || isAccident === true // Store boolean value
-//     });
-
-//     await detection.save();
-
-//     // Prepare response
-//     const responseData = {
-//       msg: 'Media uploaded successfully',
-//       detectionId: detection._id,
-//       status: 'processing'
-//     };
-
-//     // If this is an accident, fetch nearby medical services
-//     if (isAccident === 'true' || isAccident === true) {
-//       const medicalServices = await fetchNearbyMedicalServices(latitude, longitude);
-//       responseData.medicalServices = medicalServices;
-      
-//       // Store the medical services info with the detection for reference
-//       detection.medicalServices = medicalServices;
-//       await detection.save();
-//     }
-
-//     // Send response to user
-//     res.json(responseData);
-
-//     // Process with YOLOv8 in background
-//     runYoloDetection(req.file.path, detection._id)
-//       .then(async (result) => {
-//         // Upload visualization to Cloudinary if it exists
-//         let visualizationUrl = null;
-//         if (result.visualizationUrl && fs.existsSync(result.visualizationUrl)) {
-//           const visualizationUpload = await cloudinary.uploader.upload(result.visualizationUrl, {
-//             resource_type: 'image',
-//             folder: `${folder}/visualizations`
-//           });
-//           visualizationUrl = visualizationUpload.secure_url;
-          
-//           // Clean up local visualization file
-//           fs.unlinkSync(result.visualizationUrl);
-//         }
-        
-//         // Update detection with results
-//         let cleanedResult;
-//         try {
-//           // Create a new cleaned-up detection result object
-//            cleanedResult = {
-//             totalVehicles: result.totalVehicles || 0,
-//             potentialEmergencyVehicles: result.potentialEmergencyVehicles || 0,
-//             detections: result.detections || [],
-//             processedFrames: result.processedFrames || 0,
-//             vehicles: [] // Start with empty array
-//           };
-          
-//           // Handle vehicles data specifically
-//           if (result.vehicles) {
-//             if (Array.isArray(result.vehicles)) {
-//               // If it's already an array, use it directly
-//               cleanedResult.vehicles = result.vehicles;
-//             } else if (typeof result.vehicles === 'string') {
-//               // If it's a string, try to parse it
-//               try {
-//                 // This handles the case where it's a stringified array
-//                 const parsed = JSON.parse(result.vehicles);
-//                 cleanedResult.vehicles = Array.isArray(parsed) ? parsed : [parsed];
-//               } catch (e) {
-//                 // If it can't be parsed as JSON, create a single vehicle entry
-//                 console.warn('Could not parse vehicles string:', result.vehicles);
-//                 // Just make a single entry based on the string content
-//                 cleanedResult.vehicles = [{ type: 'unknown', count: cleanedResult.totalVehicles || 1 }];
-//               }
-//             } else if (typeof result.vehicles === 'object' && !Array.isArray(result.vehicles)) {
-//               // If it's a single object, put it in an array
-//               cleanedResult.vehicles = [result.vehicles];
-//             }
-//           }
-          
-//           // Update the detection with the cleaned result
-//           detection.detectionResults = cleanedResult;
-//           detection.textSummary = result.textSummary;
-//           detection.visualizationUrl = visualizationUrl;
-//           detection.status = 'completed';
-//           await detection.save();
-//         } catch (err) {
-//           console.error('Error processing detection results:', err);
-//           detection.status = 'failed';
-//           detection.errorMessage = 'Error processing detection results: ' + err.message;
-//           await detection.save();
-//           return;
-//         }
-
-//         // Find nearby officials
-//         const nearbyOfficials = await Official.find({
-//           isOnDuty: true,
-//           dutyLocation: {
-//             $near: {
-//               $geometry: {
-//                 type: 'Point',
-//                 coordinates: [parseFloat(longitude), parseFloat(latitude)]
-//               },
-//               $maxDistance: 5000 // 5 km radius
-//             }
-//           },
-//           phoneNumber: { $ne: null } // Only officials with phone numbers
-//         });
-
-//         console.log("nearby:", nearbyOfficials.length, "officials");
-        
-//         // Notify officials with the detailed text summary
-//         const notifiedOfficials = [];
-//         // for (const official of nearbyOfficials) {
-//           try {
-//             // Create notification link for SMS
-//             const official=nearbyOfficials[0];
-//             const detectionLink = `${process.env.FRONTEND_URL}/official/detection/${detection._id}`;
-            
-//             // Format SMS message - Keep it brief for SMS character limits
-//             let message = `🚨 Traffic Alert: ${cleanedResult.totalVehicles} vehicles detected. ${
-//               cleanedResult.potentialEmergencyVehicles > 0 ? 
-//               cleanedResult.potentialEmergencyVehicles + ' possible emergency vehicles. ' : ''
-//             }`;
-            
-//             // Add accident info if applicable
-//             if (detection.isAccident) {
-//               message = `🚑 ACCIDENT ALERT: ${message} Medical attention needed.`;
-//             }
-            
-//             message += `Details: ${detectionLink}`;
-            
-//             console.log("Sending SMS to", official.phoneNumber);
-            
-//             // Send SMS notification
-//             const smsResponse = await sendWhatsAppNotification(official.phoneNumber, message);
-
-//             console.log("SMS sent, SID:", smsResponse.sid);
-            
-//             // Save notification record
-//             const notification = new Notification({
-//               detection: detection._id,
-//               official: official._id,
-//               smsMessageSid: smsResponse.sid,
-//               notificationText: message,
-//               status: 'sent'
-//             });
-            
-//             await notification.save();
-//             notifiedOfficials.push(official._id);
-//           } catch (err) {
-//             console.error(`Failed to notify official ${official._id}:`, err);
-//           }
-//         // }
-
-//         // Update detection with notified officials
-//         detection.notifiedOfficials = notifiedOfficials;
-//         await detection.save();
-        
-//         // Clean up temp file after processing
-//         if (fs.existsSync(req.file.path)) {
-//           fs.unlinkSync(req.file.path);
-//         }
-//       })
-//       .catch(async (err) => {
-//         console.error('YOLOv8 detection failed:', err);
-//         detection.status = 'failed';
-//         detection.errorMessage = err.message;
-//         await detection.save();
-        
-//         // Clean up temp file on error
-//         if (fs.existsSync(req.file.path)) {
-//           fs.unlinkSync(req.file.path);
-//         }
-//       });
-
-//   } catch (err) {
-//     console.error(err.message);
-    
-//     // Clean up temp file on error
-//     if (req.file && fs.existsSync(req.file.path)) {
-//       fs.unlinkSync(req.file.path);
-//     }
-    
-//     res.status(500).send('Server error');
-//   }
-// };
-
 // Helper function to notify an official
 const notifyOfficial = async (official, detection, detectionResults) => {
   try {
@@ -2903,7 +2670,7 @@ const notifyOfficial = async (official, detection, detectionResults) => {
     
     // Send WhatsApp notification
     const smsResponse = await sendWhatsAppNotification(official.phoneNumber, message);
-
+    
     console.log("WhatsApp notification sent, SID:", smsResponse.sid);
     
     // Save notification record
@@ -2934,7 +2701,7 @@ exports.processMediaUpload = async (req, res) => {
     const { longitude, latitude, user, isAccident } = req.body;
 
     let userId;
-
+    
     // Check if user is a string that needs parsing
     if (typeof user === 'string') {
       try {
@@ -2977,16 +2744,16 @@ exports.processMediaUpload = async (req, res) => {
       notifiedOfficials: [], // Initialize with empty array
       rejectedBy: []  // Initialize with empty array for officials who reject
     });
-
+    
     await detection.save();
-
+    
     // Prepare response
     const responseData = {
       msg: 'Media uploaded successfully',
       detectionId: detection._id,
       status: 'processing'
     };
-
+    
     // If this is an accident, fetch nearby medical services
     if (isAccident === 'true' || isAccident === true) {
       const medicalServices = await fetchNearbyMedicalServices(latitude, longitude);
@@ -2996,17 +2763,17 @@ exports.processMediaUpload = async (req, res) => {
       detection.medicalServices = medicalServices;
       await detection.save();
     }
-
+    
     // Send response to user
     res.json(responseData);
-
+    
     // Process with YOLOv8 in background
     runYoloDetection(req.file.path, detection._id)
-      .then(async (result) => {
-        // Upload visualization to Cloudinary if it exists
-        let visualizationUrl = null;
-        if (result.visualizationUrl && fs.existsSync(result.visualizationUrl)) {
-          const visualizationUpload = await cloudinary.uploader.upload(result.visualizationUrl, {
+    .then(async (result) => {
+      // Upload visualization to Cloudinary if it exists
+      let visualizationUrl = null;
+      if (result.visualizationUrl && fs.existsSync(result.visualizationUrl)) {
+        const visualizationUpload = await cloudinary.uploader.upload(result.visualizationUrl, {
             resource_type: 'image',
             folder: `${folder}/visualizations`
           });
@@ -3020,7 +2787,7 @@ exports.processMediaUpload = async (req, res) => {
         let cleanedResult;
         try {
           // Create a new cleaned-up detection result object
-           cleanedResult = {
+          cleanedResult = {
             totalVehicles: result.totalVehicles || 0,
             potentialEmergencyVehicles: result.potentialEmergencyVehicles || 0,
             detections: result.detections || [],
@@ -3081,7 +2848,7 @@ exports.processMediaUpload = async (req, res) => {
         }).sort({ 
           dutyLocation: 1 // Sort by proximity (nearest first)
         });
-
+        
         console.log("Found:", nearbyOfficials);
         
         // Store the array of all nearby officials in the detection for future use
@@ -3117,7 +2884,7 @@ exports.processMediaUpload = async (req, res) => {
           fs.unlinkSync(req.file.path);
         }
       });
-
+      
   } catch (err) {
     console.error(err.message);
     
@@ -3137,10 +2904,10 @@ exports.getDetectionById = async (req, res) => {
     const detection = await Detection.findById(req?.params?.id)
       .populate('user', 'name email')
       .populate('notifiedOfficials', 'name badgeId phoneNumber');
-    
-    if (!detection) {
-      return res.status(404).json({ msg: 'Detection not found' });
-    }
+      
+      if (!detection) {
+        return res.status(404).json({ msg: 'Detection not found' });
+      }
     
     res.json(detection);
   } catch (err) {
@@ -3163,10 +2930,10 @@ exports.getUserDetections = async (req, res) => {
       .sort({ createdAt: -1 })
       .populate('notifiedOfficials', 'name badgeId')
       // .select('mediaUrl mediaType status createdAt textSummary visualizationUrl detectionResults.totalVehicles isAccident');
-    
-    res.json(detections);
-  } catch (err) {
-    console.error(err.message);
+      
+      res.json(detections);
+    } catch (err) {
+      console.error(err.message);
     res.status(500).send('Server error');
   }
 };
@@ -3175,24 +2942,23 @@ exports.getUserDetections = async (req, res) => {
 exports.getOfficialNotifications = async (req, res) => {
   try {
     const notifications = await Notification.find({ official: req.official.id })
-      .sort({ createdAt: -1 })
-      .populate({
-        path: 'detection',
-        populate: {
-          path: 'user',
-          select: 'name'
-        },
+    .sort({ createdAt: -1 })
+    .populate({
+      path: 'detection',
+      populate: {
+        path: 'user',
+        select: 'name'
+      },
         select: 'mediaUrl mediaType status createdAt textSummary visualizationUrl detectionResults.totalVehicles isAccident'
       });
-    
-    res.json(notifications);
-  } catch (err) {
-    console.error(err.message);
+      
+      res.json(notifications);
+    } catch (err) {
+      console.error(err.message);
     res.status(500).send('Server error');
   }
 };
 
-// Mark notification as read
 exports.markNotificationAsRead = async (req, res) => {
   try {
     const notification = await Notification.findOne({
@@ -3291,7 +3057,7 @@ exports.getVehicleStatistics = async (req, res) => {
     vehicleStats.vehicleTypes = vehicleTypesArray;
     
     res.json(vehicleStats);
-  
+    
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server error');
@@ -3348,63 +3114,6 @@ exports.deleteDetection = async (req, res) => {
   }
 };
 
-//changes
-// Add these functions to your detectionController.js
-
-// // Accept a detection task
-// exports.acceptTask = async (req, res) => {
-//   try {
-//     const { detectionId } = req.params;
-//     const officialId = req.official.id;
-    
-//     const detection = await Detection.findById(detectionId);
-    
-//     if (!detection) {
-//       return res.status(404).json({ msg: 'Detection not found' });
-//     }
-    
-//     // Check if the detection is already accepted by someone else
-//     if (detection.acceptedBy && detection.acceptedBy.toString() !== officialId) {
-//       return res.status(400).json({ 
-//         msg: 'This task has already been accepted by another official' 
-//       });
-//     }
-    
-//     // Check if the official previously rejected this task
-//     if (detection.rejectedBy && detection.rejectedBy.includes(officialId)) {
-//       return res.status(400).json({ 
-//         msg: 'You previously rejected this task and cannot accept it now' 
-//       });
-//     }
-    
-//     // Update detection with the accepting official
-//     detection.acceptedBy = officialId;
-//     detection.taskStatus = 'accepted';
-//     await detection.save();
-    
-//     // Update the notification status
-//     const notification = await Notification.findOne({ 
-//       detection: detectionId,
-//       official: officialId
-//     });
-    
-//     if (notification) {
-//       notification.status = 'accepted';
-//       await notification.save();
-//     }
-    
-//     res.json({ 
-//       msg: 'Task accepted successfully',
-//       detection
-//     });
-    
-//   } catch (err) {
-//     console.error(err.message);
-//     res.status(500).send('Server error');
-//   }
-// };
-
-
 // Accept a detection task
 exports.acceptTask = async (req, res) => {
   try {
@@ -3460,80 +3169,23 @@ exports.acceptTask = async (req, res) => {
 };
 
 
-
-// // Reject a detection task
-// exports.rejectTask = async (req, res) => {
-//   try {
-//     const { detectionId } = req.params;
-//     const officialId = req.official.id;
-    
-//     const detection = await Detection.findById(detectionId);
-    
-//     if (!detection) {
-//       return res.status(404).json({ msg: 'Detection not found' });
-//     }
-    
-//     // Check if the task is already accepted by this official
-//     if (detection.acceptedBy && detection.acceptedBy.toString() === officialId) {
-//       return res.status(400).json({ 
-//         msg: 'You have already accepted this task. Please release it first.' 
-//       });
-//     }
-    
-//     // Add official to rejected list if not already there
-//     if (!detection.rejectedBy) {
-//       detection.rejectedBy = [];
-//     }
-    
-//     if (!detection.rejectedBy.includes(officialId)) {
-//       detection.rejectedBy.push(officialId);
-//     }
-    
-//     await detection.save();
-    
-//     // Update the notification status
-//     const notification = await Notification.findOne({ 
-//       detection: detectionId,
-//       official: officialId
-//     });
-    
-//     if (notification) {
-//       notification.status = 'rejected';
-//       await notification.save();
-//     }
-    
-//     // Find the next nearest official to notify
-//     await notifyNextNearestOfficial(detection);
-    
-//     res.json({ 
-//       msg: 'Task rejected successfully',
-//       detection
-//     });
-    
-//   } catch (err) {
-//     console.error(err.message);
-//     res.status(500).send('Server error');
-//   }
-// };
-
-
-// Reject a detection task
-exports.rejectTask = async (req, res) => {
-  try {
-    const { detectionId } = req.params;
-    const officialId = req.official.id;
-    
-    const detection = await Detection.findById(detectionId);
-    
-    if (!detection) {
-      return res.status(404).json({ msg: 'Detection not found' });
-    }
-    
-    // Check if the task is already accepted by this official
-    if (detection.acceptedBy && detection.acceptedBy.toString() === officialId) {
-      return res.status(400).json({ 
-        msg: 'You have already accepted this task. Please release it first.' 
-      });
+  // Reject a detection task
+  exports.rejectTask = async (req, res) => {
+    try {
+      const { detectionId } = req.params;
+      const officialId = req.official.id;
+      
+      const detection = await Detection.findById(detectionId);
+      
+      if (!detection) {
+        return res.status(404).json({ msg: 'Detection not found' });
+      }
+      
+      // Check if the task is already accepted by this official
+      if (detection.acceptedBy && detection.acceptedBy.toString() === officialId) {
+        return res.status(400).json({ 
+          msg: 'You have already accepted this task. Please release it first.' 
+        });
     }
     
     // Add official to rejected list if not already there
@@ -3546,7 +3198,7 @@ exports.rejectTask = async (req, res) => {
     }
     
     await detection.save();
-
+    
     console.log("current detection state",detection)
     
     // Update the notification status
@@ -3627,105 +3279,10 @@ exports.completeTask = async (req, res) => {
   }
 };
 
-// // Helper function to notify the next nearest official
-// const notifyNextNearestOfficial = async (detection) => {
-//   try {
-//     // Get detection location
-//     const [longitude, latitude] = detection.location.coordinates;
-    
-//     // Find the next nearest official who hasn't rejected this task
-//     const nearbyOfficials = await Official.find({
-//       isOnDuty: true,
-//       dutyLocation: {
-//         $near: {
-//           $geometry: {
-//             type: 'Point',
-//             coordinates: [parseFloat(longitude), parseFloat(latitude)]
-//           },
-//           $maxDistance: 10000 // 10 km radius (increased from 5km)
-//         }
-//       },
-//       phoneNumber: { $ne: null }, // Only officials with phone numbers
-//       _id: { 
-//         $nin: detection.rejectedBy, // Exclude officials who rejected
-//         $ne: detection.acceptedBy   // Exclude official who accepted
-//       }
-//     }).limit(1);
-    
-//     if (nearbyOfficials.length === 0) {
-//       console.log('No more officials available nearby');
-//       return false;
-//     }
-    
-//     const nextOfficial = nearbyOfficials[0];
-    
-//     // Check if we've already notified this official
-//     const existingNotification = await Notification.findOne({
-//       detection: detection._id,
-//       official: nextOfficial._id
-//     });
-    
-//     if (existingNotification) {
-//       // Already notified, no need to send again
-//       return true;
-//     }
-    
-//     // Create notification link for SMS
-//     const detectionLink = `${process.env.FRONTEND_URL}/official/detection/${detection._id}`;
-    
-//     // Format message
-//     let message = `🚨 Traffic Alert: `;
-    
-//     if (detection.detectionResults && detection.detectionResults.totalVehicles) {
-//       message += `${detection.detectionResults.totalVehicles} vehicles detected. `;
-      
-//       if (detection.detectionResults.potentialEmergencyVehicles > 0) {
-//         message += `${detection.detectionResults.potentialEmergencyVehicles} possible emergency vehicles. `;
-//       }
-//     }
-    
-//     // Add accident info if applicable
-//     if (detection.isAccident) {
-//       message = `🚑 ACCIDENT ALERT: ${message} Medical attention needed. `;
-//     }
-    
-//     message += `Task needs attention as previous official(s) unavailable. Details: ${detectionLink}`;
-    
-//     console.log("Sending SMS to next official:", nextOfficial.phoneNumber);
-    
-//     // Send WhatsApp notification
-//     const smsResponse = await sendWhatsAppNotification(nextOfficial.phoneNumber, message);
-    
-//     console.log("SMS sent to next official, SID:", smsResponse.sid);
-    
-//     // Save notification record
-//     const notification = new Notification({
-//       detection: detection._id,
-//       official: nextOfficial._id,
-//       smsMessageSid: smsResponse.sid,
-//       notificationText: message,
-//       status: 'sent'
-//     });
-    
-//     await notification.save();
-    
-//     // Add to notified officials list
-//     if (!detection.notifiedOfficials.includes(nextOfficial._id)) {
-//       detection.notifiedOfficials.push(nextOfficial._id);
-//       await detection.save();
-//     }
-    
-//     return true;
-//   } catch (err) {
-//     console.error('Error notifying next official:', err);
-//     return false;
-//   }
-// };
 
-// Helper function to notify the next nearest official
 const notifyNextNearestOfficial = async (detection) => {
-  try {
-    // Get detection location
+        try {
+          // Get detection location
     const [longitude, latitude] = detection.location.coordinates;
     
     // Find the next nearest official who hasn't rejected this task and hasn't been notified
@@ -3749,12 +3306,12 @@ const notifyNextNearestOfficial = async (detection) => {
     
     console.log("nearby",nearbyOfficials)
     console.log("notified nearby",detection?.notifiedOfficials)
-
+    
     // Filter out officials who have already been notified
     const unnotifiedOfficials = nearbyOfficials.filter(official => 
       !detection.notifiedOfficials.some(id => id.toString() === official._id.toString())
     );
-
+    
 
     
     if (unnotifiedOfficials.length === 0) {
@@ -3825,11 +3382,11 @@ const notifyNextNearestOfficial = async (detection) => {
 exports.getDetectionStatus = async (req, res) => {
   try {
     const detection = await Detection.findById(req.params.id)
-      .populate('user', 'name email')
-      .populate('notifiedOfficials', 'name badgeId phoneNumber')
-      .populate('currentlyNotified', 'name badgeId phoneNumber')
-      .populate('acceptedBy', 'name badgeId phoneNumber')
-      .populate('rejectedBy', 'name badgeId phoneNumber');
+    .populate('user', 'name email')
+    .populate('notifiedOfficials', 'name badgeId phoneNumber')
+    .populate('currentlyNotified', 'name badgeId phoneNumber')
+    .populate('acceptedBy', 'name badgeId phoneNumber')
+    .populate('rejectedBy', 'name badgeId phoneNumber');
     
     if (!detection) {
       return res.status(404).json({ msg: 'Detection not found' });
@@ -3837,8 +3394,8 @@ exports.getDetectionStatus = async (req, res) => {
     
     // Get all notifications related to this detection to build a timeline
     const notifications = await Notification.find({ detection: req.params.id })
-      .populate('official', 'name badgeId')
-      .sort({ createdAt: 1 });
+    .populate('official', 'name badgeId')
+    .sort({ createdAt: 1 });
     
     // Build notification timeline
     const timeline = notifications.map(notification => ({
@@ -3872,3 +3429,362 @@ exports.getDetectionStatus = async (req, res) => {
     res.status(500).send('Server error');
   }
 };
+
+
+
+
+  // // Process media upload
+  // exports.processMediaUpload = async (req, res) => {
+  //   try {
+  //     if (!req.file) {
+  //       return res.status(400).json({ msg: 'No file uploaded' });
+  //     }
+      
+  //     const { longitude, latitude, user, isAccident } = req.body;
+  
+  //     let userId;
+  
+  //     // Check if user is a string that needs parsing
+  //     if (typeof user === 'string') {
+  //       try {
+  //         const parsedUser = JSON.parse(user);
+  //         userId = parsedUser?._id;
+  //       } catch (e) {
+  //         // If not valid JSON, just use it directly
+  //         userId = user;
+  //       }
+  //     } else if (user && user._id) {
+  //       // If it's already an object
+  //       userId = user._id;
+  //     }
+      
+  //     if (!longitude || !latitude) {
+  //       return res.status(400).json({ msg: 'Location coordinates are required' });
+  //     }
+      
+  //     // Determine media type
+  //     const mediaType = req.file.mimetype.startsWith('image/') ? 'image' : 'video';
+      
+  //     // Upload to Cloudinary
+  //     const folder = 'traffic-detection';
+  //     const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+  //       resource_type: mediaType === 'image' ? 'image' : 'video',
+  //       folder
+  //     });
+      
+  //     // Create detection record with accident flag
+  //     const detection = new Detection({
+  //       user: userId,
+  //       mediaUrl: uploadResult.secure_url,
+  //       mediaType,
+  //       cloudinaryPublicId: uploadResult.public_id,
+  //       location: {
+  //         coordinates: [parseFloat(longitude), parseFloat(latitude)]
+  //       },
+  //       status: 'processing',
+  //       isAccident: isAccident === 'true' || isAccident === true // Store boolean value
+  //     });
+  
+  //     await detection.save();
+  
+  //     // Prepare response
+  //     const responseData = {
+  //       msg: 'Media uploaded successfully',
+  //       detectionId: detection._id,
+  //       status: 'processing'
+  //     };
+  
+  //     // If this is an accident, fetch nearby medical services
+  //     if (isAccident === 'true' || isAccident === true) {
+  //       const medicalServices = await fetchNearbyMedicalServices(latitude, longitude);
+  //       responseData.medicalServices = medicalServices;
+        
+  //       // Store the medical services info with the detection for reference
+  //       detection.medicalServices = medicalServices;
+  //       await detection.save();
+  //     }
+  
+  //     // Send response to user
+  //     res.json(responseData);
+  
+  //     // Process with YOLOv8 in background
+  //     runYoloDetection(req.file.path, detection._id)
+  //       .then(async (result) => {
+  //         // Upload visualization to Cloudinary if it exists
+  //         let visualizationUrl = null;
+  //         if (result.visualizationUrl && fs.existsSync(result.visualizationUrl)) {
+  //           const visualizationUpload = await cloudinary.uploader.upload(result.visualizationUrl, {
+  //             resource_type: 'image',
+  //             folder: `${folder}/visualizations`
+  //           });
+  //           visualizationUrl = visualizationUpload.secure_url;
+            
+  //           // Clean up local visualization file
+  //           fs.unlinkSync(result.visualizationUrl);
+  //         }
+          
+  //         // Update detection with results
+  //         let cleanedResult;
+  //         try {
+  //           // Create a new cleaned-up detection result object
+  //            cleanedResult = {
+  //             totalVehicles: result.totalVehicles || 0,
+  //             potentialEmergencyVehicles: result.potentialEmergencyVehicles || 0,
+  //             detections: result.detections || [],
+  //             processedFrames: result.processedFrames || 0,
+  //             vehicles: [] // Start with empty array
+  //           };
+            
+  //           // Handle vehicles data specifically
+  //           if (result.vehicles) {
+  //             if (Array.isArray(result.vehicles)) {
+  //               // If it's already an array, use it directly
+  //               cleanedResult.vehicles = result.vehicles;
+  //             } else if (typeof result.vehicles === 'string') {
+  //               // If it's a string, try to parse it
+  //               try {
+  //                 // This handles the case where it's a stringified array
+  //                 const parsed = JSON.parse(result.vehicles);
+  //                 cleanedResult.vehicles = Array.isArray(parsed) ? parsed : [parsed];
+  //               } catch (e) {
+  //                 // If it can't be parsed as JSON, create a single vehicle entry
+  //                 console.warn('Could not parse vehicles string:', result.vehicles);
+  //                 // Just make a single entry based on the string content
+  //                 cleanedResult.vehicles = [{ type: 'unknown', count: cleanedResult.totalVehicles || 1 }];
+  //               }
+  //             } else if (typeof result.vehicles === 'object' && !Array.isArray(result.vehicles)) {
+  //               // If it's a single object, put it in an array
+  //               cleanedResult.vehicles = [result.vehicles];
+  //             }
+  //           }
+            
+  //           // Update the detection with the cleaned result
+  //           detection.detectionResults = cleanedResult;
+  //           detection.textSummary = result.textSummary;
+  //           detection.visualizationUrl = visualizationUrl;
+  //           detection.status = 'completed';
+  //           await detection.save();
+  //         } catch (err) {
+  //           console.error('Error processing detection results:', err);
+  //           detection.status = 'failed';
+  //           detection.errorMessage = 'Error processing detection results: ' + err.message;
+  //           await detection.save();
+  //           return;
+  //         }
+  
+  //         // Find nearby officials
+  //         const nearbyOfficials = await Official.find({
+  //           isOnDuty: true,
+  //           dutyLocation: {
+  //             $near: {
+  //               $geometry: {
+  //                 type: 'Point',
+  //                 coordinates: [parseFloat(longitude), parseFloat(latitude)]
+  //               },
+  //               $maxDistance: 5000 // 5 km radius
+  //             }
+  //           },
+  //           phoneNumber: { $ne: null } // Only officials with phone numbers
+  //         });
+  
+  //         console.log("nearby:", nearbyOfficials.length, "officials");
+          
+  //         // Notify officials with the detailed text summary
+  //         const notifiedOfficials = [];
+  //         // for (const official of nearbyOfficials) {
+  //           try {
+  //             // Create notification link for SMS
+  //             const official=nearbyOfficials[0];
+  //             const detectionLink = `${process.env.FRONTEND_URL}/official/detection/${detection._id}`;
+              
+  //             // Format SMS message - Keep it brief for SMS character limits
+  //             let message = `🚨 Traffic Alert: ${cleanedResult.totalVehicles} vehicles detected. ${
+  //               cleanedResult.potentialEmergencyVehicles > 0 ? 
+  //               cleanedResult.potentialEmergencyVehicles + ' possible emergency vehicles. ' : ''
+  //             }`;
+              
+  //             // Add accident info if applicable
+  //             if (detection.isAccident) {
+  //               message = `🚑 ACCIDENT ALERT: ${message} Medical attention needed.`;
+  //             }
+              
+  //             message += `Details: ${detectionLink}`;
+              
+  //             console.log("Sending SMS to", official.phoneNumber);
+              
+  //             // Send SMS notification
+  //             const smsResponse = await sendWhatsAppNotification(official.phoneNumber, message);
+  
+  //             console.log("SMS sent, SID:", smsResponse.sid);
+              
+  //             // Save notification record
+  //             const notification = new Notification({
+  //               detection: detection._id,
+  //               official: official._id,
+  //               smsMessageSid: smsResponse.sid,
+  //               notificationText: message,
+  //               status: 'sent'
+  //             });
+              
+  //             await notification.save();
+  //             notifiedOfficials.push(official._id);
+  //           } catch (err) {
+  //             console.error(`Failed to notify official ${official._id}:`, err);
+  //           }
+  //         // }
+  
+  //         // Update detection with notified officials
+  //         detection.notifiedOfficials = notifiedOfficials;
+  //         await detection.save();
+          
+  //         // Clean up temp file after processing
+  //         if (fs.existsSync(req.file.path)) {
+  //           fs.unlinkSync(req.file.path);
+  //         }
+  //       })
+  //       .catch(async (err) => {
+  //         console.error('YOLOv8 detection failed:', err);
+  //         detection.status = 'failed';
+  //         detection.errorMessage = err.message;
+  //         await detection.save();
+          
+  //         // Clean up temp file on error
+  //         if (fs.existsSync(req.file.path)) {
+  //           fs.unlinkSync(req.file.path);
+  //         }
+  //       });
+  
+  //   } catch (err) {
+  //     console.error(err.message);
+      
+  //     // Clean up temp file on error
+  //     if (req.file && fs.existsSync(req.file.path)) {
+  //       fs.unlinkSync(req.file.path);
+  //     }
+      
+  //     res.status(500).send('Server error');
+  //   }
+  // };
+  
+  // Mark notification as read
+
+
+
+
+
+
+// // Reject a detection task
+// exports.rejectTask = async (req, res) => {
+  //   try {
+    //     const { detectionId } = req.params;
+    //     const officialId = req.official.id;
+    
+    //     const detection = await Detection.findById(detectionId);
+    
+    //     if (!detection) {
+      //       return res.status(404).json({ msg: 'Detection not found' });
+//     }
+
+//     // Check if the task is already accepted by this official
+//     if (detection.acceptedBy && detection.acceptedBy.toString() === officialId) {
+  //       return res.status(400).json({ 
+    //         msg: 'You have already accepted this task. Please release it first.' 
+    //       });
+    //     }
+    
+    //     // Add official to rejected list if not already there
+    //     if (!detection.rejectedBy) {
+      //       detection.rejectedBy = [];
+      //     }
+      
+      //     if (!detection.rejectedBy.includes(officialId)) {
+        //       detection.rejectedBy.push(officialId);
+//     }
+
+//     await detection.save();
+
+//     // Update the notification status
+//     const notification = await Notification.findOne({ 
+  //       detection: detectionId,
+  //       official: officialId
+  //     });
+  
+  //     if (notification) {
+    //       notification.status = 'rejected';
+    //       await notification.save();
+    //     }
+    
+    //     // Find the next nearest official to notify
+    //     await notifyNextNearestOfficial(detection);
+    
+    //     res.json({ 
+      //       msg: 'Task rejected successfully',
+//       detection
+//     });
+
+//   } catch (err) {
+  //     console.error(err.message);
+  //     res.status(500).send('Server error');
+  //   }
+  // };
+  
+  
+
+
+
+//changes
+// Add these functions to your detectionController.js
+
+// // Accept a detection task
+// exports.acceptTask = async (req, res) => {
+  //   try {
+//     const { detectionId } = req.params;
+//     const officialId = req.official.id;
+
+//     const detection = await Detection.findById(detectionId);
+
+//     if (!detection) {
+  //       return res.status(404).json({ msg: 'Detection not found' });
+//     }
+
+//     // Check if the detection is already accepted by someone else
+//     if (detection.acceptedBy && detection.acceptedBy.toString() !== officialId) {
+  //       return res.status(400).json({ 
+    //         msg: 'This task has already been accepted by another official' 
+    //       });
+    //     }
+    
+    //     // Check if the official previously rejected this task
+    //     if (detection.rejectedBy && detection.rejectedBy.includes(officialId)) {
+      //       return res.status(400).json({ 
+        //         msg: 'You previously rejected this task and cannot accept it now' 
+//       });
+//     }
+    
+//     // Update detection with the accepting official
+//     detection.acceptedBy = officialId;
+//     detection.taskStatus = 'accepted';
+//     await detection.save();
+
+//     // Update the notification status
+//     const notification = await Notification.findOne({ 
+  //       detection: detectionId,
+//       official: officialId
+//     });
+
+//     if (notification) {
+  //       notification.status = 'accepted';
+  //       await notification.save();
+  //     }
+  
+  //     res.json({ 
+    //       msg: 'Task accepted successfully',
+    //       detection
+    //     });
+    
+    //   } catch (err) {
+      //     console.error(err.message);
+      //     res.status(500).send('Server error');
+      //   }
+// };
+

@@ -7,7 +7,7 @@ require('dotenv').config();
 
 // Register official
 exports.registerOfficial = async (req, res) => {
-  const { name, email, password, badgeId,phoneNumber } = req.body;
+  const { name, email, password, badgeId, phoneNumber, policeStation } = req.body;
 
   try {
     // Check if official already exists
@@ -22,7 +22,8 @@ exports.registerOfficial = async (req, res) => {
       email,
       password,
       badgeId,
-      phoneNumber
+      phoneNumber,
+      policeStation
     });
 
     await official.save();
@@ -48,6 +49,59 @@ exports.registerOfficial = async (req, res) => {
     res.status(500).send('Server error');
   }
 };
+
+// Other controller functions remain the same...
+
+// controllers/officialController.js
+// const Official = require('../models/Official');
+// Official.syncIndexes();
+
+// const jwt = require('jsonwebtoken');
+// require('dotenv').config();
+
+// // Register official
+// exports.registerOfficial = async (req, res) => {
+//   const { name, email, password, badgeId,phoneNumber } = req.body;
+
+//   try {
+//     // Check if official already exists
+//     let official = await Official.findOne({ $or: [{ email }, { badgeId }] });
+//     if (official) {
+//       return res.status(400).json({ msg: 'Official already exists' });
+//     }
+
+//     // Create new official
+//     official = new Official({
+//       name,
+//       email,
+//       password,
+//       badgeId,
+//       phoneNumber
+//     });
+
+//     await official.save();
+
+//     // Create JWT
+//     const payload = {
+//       official: {
+//         id: official.id
+//       }
+//     };
+
+//     jwt.sign(
+//       payload,
+//       process.env.JWT_SECRET,
+//       { expiresIn: '7d' },
+//       (err, token) => {
+//         if (err) throw err;
+//         res.json({ token });
+//       }
+//     );
+//   } catch (err) {
+//     console.error(err.message);
+//     res.status(500).send('Server error');
+//   }
+// };
 
 // Login official
 exports.loginOfficial = async (req, res) => {
@@ -103,9 +157,10 @@ exports.getOfficialProfile = async (req, res) => {
     res.status(500).send('Server error');
   }
 };
-
+  
 // Update duty location
 exports.updateDutyLocation = async (req, res) => {
+  console.log(req.body)
   const { longitude, latitude, radius, isOnDuty } = req.body;
 
   try {
