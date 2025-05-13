@@ -183,10 +183,8 @@ exports.getOfficialPerformance = async (req, res) => {
     
     // Get officials from this police station
     const query = { policeStation };
-    if (officialId) {
-      console.log("here==========")
-      query._id = new mongoose.Types.ObjectId(officialId);
-      console.log("also----------")
+    if (officialId) {      query._id = new mongoose.Types.ObjectId(officialId);
+
     }
     
     const officials = await Official.find(query);

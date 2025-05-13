@@ -2470,6 +2470,9 @@ const axios = require('axios');  // We'll still use axios for API requests
 require('dotenv').config();
 const {sendWhatsAppNotification}= require('../utils/twilioWhatsapp')
 
+const { sendWebPushNotification, createNotificationPayload } = require('../utils/webPushNotification');
+
+
 // Configure Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -2648,6 +2651,49 @@ const fetchNearbyMedicalServices = async (latitude, longitude) => {
   }
 };
 // Helper function to notify an official
+// const notifyOfficial = async (official, detection, detectionResults) => {
+//   try {
+//     // Create notification link for SMS
+//     const detectionLink = `${process.env.FRONTEND_URL}/official/detection/${detection._id}`;
+    
+//     // Format SMS message - Keep it brief for SMS character limits
+//     let message = `🚨 Traffic Alert: ${detectionResults.totalVehicles} vehicles detected. ${
+//       detectionResults.potentialEmergencyVehicles > 0 ? 
+//       detectionResults.potentialEmergencyVehicles + ' possible emergency vehicles. ' : ''
+//     }`;
+    
+//     // Add accident info if applicable
+//     if (detection.isAccident) {
+//       message = `🚑 ACCIDENT ALERT: ${message} Medical attention needed.`;
+//     }
+    
+//     message += ` Details: ${detectionLink}`;
+    
+//     console.log("Sending WhatsApp notification to", official.phoneNumber);
+    
+//     // Send WhatsApp notification
+//     const smsResponse = await sendWhatsAppNotification(official.phoneNumber, message);
+    
+//     console.log("WhatsApp notification sent, SID:", smsResponse.sid);
+    
+//     // Save notification record
+//     const notification = new Notification({
+//       detection: detection._id,
+//       official: official._id,
+//       smsMessageSid: smsResponse.sid,
+//       notificationText: message,
+//       status: 'sent'
+//     });
+    
+//     await notification.save();
+//     return notification;
+//   } catch (err) {
+//     console.error(`Failed to notify official ${official._id}:`, err);
+//     throw err;
+//   }
+// };
+
+
 const notifyOfficial = async (official, detection, detectionResults) => {
   try {
     // Create notification link for SMS
@@ -2673,6 +2719,26 @@ const notifyOfficial = async (official, detection, detectionResults) => {
     
     console.log("WhatsApp notification sent, SID:", smsResponse.sid);
     
+    // Check if official has push subscription and send web push notification
+    if (official.pushSubscription) {
+      try {
+        const notificationPayload = createNotificationPayload(detection, detectionResults);
+        
+        await sendWebPushNotification(
+          official.pushSubscription,
+          notificationPayload
+        );
+        
+        console.log("Web push notification sent to official:", official._id);
+      } catch (pushError) {
+        console.error("Failed to send web push notification:", pushError);
+        // Continue execution even if push notification fails
+      }
+    }
+    else{
+      console.log("not found")
+    }
+    
     // Save notification record
     const notification = new Notification({
       detection: detection._id,
@@ -2689,7 +2755,6 @@ const notifyOfficial = async (official, detection, detectionResults) => {
     throw err;
   }
 };
-
 
 // Process media upload
 exports.processMediaUpload = async (req, res) => {
@@ -3280,9 +3345,106 @@ exports.completeTask = async (req, res) => {
 };
 
 
+// const notifyNextNearestOfficial = async (detection) => {
+//         try {
+//           // Get detection location
+//     const [longitude, latitude] = detection.location.coordinates;
+    
+//     // Find the next nearest official who hasn't rejected this task and hasn't been notified
+//     const nearbyOfficials = await Official.find({
+//       isOnDuty: true,
+//       dutyLocation: {
+//         $near: {
+//           $geometry: {
+//             type: 'Point',
+//             coordinates: [parseFloat(longitude), parseFloat(latitude)]
+//           },
+//           $maxDistance: 1000000 // 10 km radius (increased from 5km)
+//         }
+//       },
+//       phoneNumber: { $ne: null }, // Only officials with phone numbers
+//       _id: { 
+//         $nin: detection.rejectedBy, // Exclude officials who rejected
+//         $ne: detection.acceptedBy   // Exclude official who accepted
+//       }
+//     }).sort({ dutyLocation: 1 }); // Sort by proximity (nearest first)
+    
+//     console.log("nearby",nearbyOfficials)
+//     console.log("notified nearby",detection?.notifiedOfficials)
+    
+//     // Filter out officials who have already been notified
+//     const unnotifiedOfficials = nearbyOfficials.filter(official => 
+//       !detection.notifiedOfficials.some(id => id.toString() === official._id.toString())
+//     );
+    
+
+    
+//     if (unnotifiedOfficials.length === 0) {
+//       console.log('No more officials available nearby');
+//       return false;
+//     }
+    
+//     const nextOfficial = unnotifiedOfficials[0];
+    
+//     // Create notification link for SMS
+//     const detectionLink = `${process.env.FRONTEND_URL}/official/detection/${detection._id}`;
+    
+//     // Format message
+//     let message = `🚨 Traffic Alert: `;
+    
+//     if (detection.detectionResults && detection.detectionResults.totalVehicles) {
+//       message += `${detection.detectionResults.totalVehicles} vehicles detected. `;
+      
+//       if (detection.detectionResults.potentialEmergencyVehicles > 0) {
+//         message += `${detection.detectionResults.potentialEmergencyVehicles} possible emergency vehicles. `;
+//       }
+//     }
+    
+//     // Add accident info if applicable
+//     if (detection.isAccident) {
+//       message = `🚑 ACCIDENT ALERT: ${message} Medical attention needed. `;
+//     }
+    
+//     message += `Task needs attention as previous official(s) unavailable. Details: ${detectionLink}`;
+    
+//     console.log("Sending WhatsApp notification to next official:", nextOfficial.phoneNumber);
+    
+//     // Send WhatsApp notification
+//     const smsResponse = await sendWhatsAppNotification(nextOfficial.phoneNumber, message);
+    
+//     console.log("WhatsApp notification sent to next official, SID:", smsResponse.sid);
+    
+//     // Save notification record
+//     const notification = new Notification({
+//       detection: detection._id,
+//       official: nextOfficial._id,
+//       smsMessageSid: smsResponse.sid,
+//       notificationText: message,
+//       status: 'sent'
+//     });
+    
+//     await notification.save();
+    
+//     // Add to notified officials list
+//     if (!detection.notifiedOfficials.includes(nextOfficial._id)) {
+//       detection.notifiedOfficials.push(nextOfficial._id);
+//     }
+    
+//     // Update the currently notified field to this new official
+//     detection.currentlyNotified = nextOfficial._id;
+//     await detection.save();
+    
+//     return true;
+//   } catch (err) {
+//     console.error('Error notifying next official:', err);
+//     return false;
+//   }
+// };
+
+
 const notifyNextNearestOfficial = async (detection) => {
-        try {
-          // Get detection location
+  try {
+    // Get detection location
     const [longitude, latitude] = detection.location.coordinates;
     
     // Find the next nearest official who hasn't rejected this task and hasn't been notified
@@ -3311,8 +3473,6 @@ const notifyNextNearestOfficial = async (detection) => {
     const unnotifiedOfficials = nearbyOfficials.filter(official => 
       !detection.notifiedOfficials.some(id => id.toString() === official._id.toString())
     );
-    
-
     
     if (unnotifiedOfficials.length === 0) {
       console.log('No more officials available nearby');
@@ -3349,6 +3509,25 @@ const notifyNextNearestOfficial = async (detection) => {
     
     console.log("WhatsApp notification sent to next official, SID:", smsResponse.sid);
     
+    // Send web push notification if the official has a subscription
+    if (nextOfficial.pushSubscription) {
+      try {
+        // Create notification payload based on detection data
+        const notificationPayload = createNotificationPayload(detection, detection.detectionResults);
+        notificationPayload.body += 'Task needs attention as previous official(s) unavailable.';
+        
+        await sendWebPushNotification(
+          nextOfficial.pushSubscription,
+          notificationPayload
+        );
+        
+        console.log("Web push notification sent to next official:", nextOfficial._id);
+      } catch (pushError) {
+        console.error("Failed to send web push notification to next official:", pushError);
+        // Continue execution even if push notification fails
+      }
+    }
+    
     // Save notification record
     const notification = new Notification({
       detection: detection._id,
@@ -3375,7 +3554,6 @@ const notifyNextNearestOfficial = async (detection) => {
     return false;
   }
 };
-
 
 
 // Get detailed detection status including notification history

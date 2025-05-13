@@ -35,4 +35,39 @@ router.put('/duty-location', officialAuth, updateDutyLocation);
 // @access  Private
 router.put('/telegram', officialAuth, updateTelegramChatId);
 
+
+// Save push subscription
+router.post('/subscribe', officialAuth, async (req, res) => {
+  try {
+    const subscription = req.body;
+    const official = await Official.findById(req.official.id);
+    
+    if (!official) {
+      return res.status(404).json({ msg: 'Official not found' });
+    }
+    
+    official.pushSubscription = subscription;
+    await official.save();
+    
+    res.status(201).json({ success: true });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+});
+
+router.get('/notifications/unread/count', officialAuth, async (req, res) => {
+  try {
+    const count = await Notification.countDocuments({
+      official: req.official.id,
+      status: 'sent' // Consider 'sent' as unread
+    });
+    
+    res.json({ count });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+});
+
 module.exports = router;

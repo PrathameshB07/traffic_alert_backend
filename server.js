@@ -57,6 +57,7 @@ const detectionRoutes = require('./routes/detectionRoutes');
 const telegramRoutes = require('./routes/telegramRoutes');
 const chiefAuthRoutes = require('./routes/chiefAuthRoutes');
 const chiefDashboardRoutes = require('./routes/chiefDashboardRoutes');
+const webpushRoutes=require('./routes/webpush')
 // const webhookRoutes = require('./routes/webhooks');
 require('dotenv').config();
 
@@ -89,6 +90,7 @@ app.use('/api/detections', detectionRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/chief', chiefAuthRoutes);
 app.use('/api/chief/dashboard', chiefDashboardRoutes);
+app.use('api/webpush',webpushRoutes)
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -209,6 +209,11 @@ const officialSchema = new mongoose.Schema({
       default: [0, 0]
     }
   },
+
+  pushSubscription: {
+    type: Object,
+    default: null
+  },
   radius: {
     type: Number,
     default: 5000 // radius in meters for duty area

@@ -4,11 +4,11 @@ const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 // Register a new chief official
 exports.register = async (req, res) => {
-  console.log("jhjhjh")
+
   // Validate request
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    console.log(errors)
+
     return res.status(400).json({ errors: errors.array() });
   }
   const { name, email, password, badgeId, policeStation, phoneNumber } = req.body;
