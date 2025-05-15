@@ -69,7 +69,8 @@ app.use(cors({
   origin: [
     'https://traffic-alert-app.vercel.app',
     'http://localhost:3000', // Keep this for local development
-    'http://localhost:3001'
+    'http://localhost:3001',
+    'https://chief-offficial.vercel.app'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token']
