@@ -1701,7 +1701,7 @@ const notifyNextNearestOfficial = async (detection) => {
     console.log("Sending WhatsApp notification to next official:", nextOfficial.phoneNumber);
     
     // Send WhatsApp notification
-    const smsResponse = await sendWhatsAppNotification(nextOfficial.phoneNumber, message);
+    const smsResponse = await sendSmsNotification(nextOfficial.phoneNumber, message);
     
     console.log("WhatsApp notification sent to next official, SID:", smsResponse.sid);
     
