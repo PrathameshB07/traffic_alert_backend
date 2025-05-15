@@ -508,4 +508,30 @@ const DetectionSchema = new Schema({
 // Add index for geospatial queries
 DetectionSchema.index({ location: '2dsphere' });
 
+const setupIndexes = async () => {
+  try {
+    const mongoose = require('mongoose');
+    const db = mongoose.connection;
+    
+    // Wait for the connection to be ready
+    if (db.readyState !== 1) {
+      console.log('Waiting for database connection to be ready before creating indexes...');
+      await new Promise(resolve => {
+        db.once('open', resolve);
+      });
+    }
+    
+    // Create or recreate the 2dsphere index on location.coordinates
+    console.log('Creating geospatial index on Detection.location...');
+    await mongoose.model('Detection').collection.createIndex({ 'location': '2dsphere' });
+    console.log('Geospatial index created successfully!');
+    
+  } catch (error) {
+    console.error('Error creating geospatial index:', error);
+  }
+};
+
+// Call the setup function when the model is required
+setupIndexes();
+
 module.exports = mongoose.model('Detection', DetectionSchema);
