@@ -1869,3 +1869,296 @@ exports.getDetectionStatus = async (req, res) => {
   //     };
   
   //     // If this is an accident, fetch nearby medical services
+  //     if (isAccident === 'true' || isAccident === true) {
+  //       const medicalServices = await fetchNearbyMedicalServices(latitude, longitude);
+  //       responseData.medicalServices = medicalServices;
+        
+  //       // Store the medical services info with the detection for reference
+  //       detection.medicalServices = medicalServices;
+  //       await detection.save();
+  //     }
+  
+  //     // Send response to user
+  //     res.json(responseData);
+  
+  //     // Process with YOLOv8 in background
+  //     runYoloDetection(req.file.path, detection._id)
+  //       .then(async (result) => {
+  //         // Upload visualization to Cloudinary if it exists
+  //         let visualizationUrl = null;
+  //         if (result.visualizationUrl && fs.existsSync(result.visualizationUrl)) {
+  //           const visualizationUpload = await cloudinary.uploader.upload(result.visualizationUrl, {
+  //             resource_type: 'image',
+  //             folder: `${folder}/visualizations`
+  //           });
+  //           visualizationUrl = visualizationUpload.secure_url;
+            
+  //           // Clean up local visualization file
+  //           fs.unlinkSync(result.visualizationUrl);
+  //         }
+          
+  //         // Update detection with results
+  //         let cleanedResult;
+  //         try {
+  //           // Create a new cleaned-up detection result object
+  //            cleanedResult = {
+  //             totalVehicles: result.totalVehicles || 0,
+  //             potentialEmergencyVehicles: result.potentialEmergencyVehicles || 0,
+  //             detections: result.detections || [],
+  //             processedFrames: result.processedFrames || 0,
+  //             vehicles: [] // Start with empty array
+  //           };
+            
+  //           // Handle vehicles data specifically
+  //           if (result.vehicles) {
+  //             if (Array.isArray(result.vehicles)) {
+  //               // If it's already an array, use it directly
+  //               cleanedResult.vehicles = result.vehicles;
+  //             } else if (typeof result.vehicles === 'string') {
+  //               // If it's a string, try to parse it
+  //               try {
+  //                 // This handles the case where it's a stringified array
+  //                 const parsed = JSON.parse(result.vehicles);
+  //                 cleanedResult.vehicles = Array.isArray(parsed) ? parsed : [parsed];
+  //               } catch (e) {
+  //                 // If it can't be parsed as JSON, create a single vehicle entry
+  //                 console.warn('Could not parse vehicles string:', result.vehicles);
+  //                 // Just make a single entry based on the string content
+  //                 cleanedResult.vehicles = [{ type: 'unknown', count: cleanedResult.totalVehicles || 1 }];
+  //               }
+  //             } else if (typeof result.vehicles === 'object' && !Array.isArray(result.vehicles)) {
+  //               // If it's a single object, put it in an array
+  //               cleanedResult.vehicles = [result.vehicles];
+  //             }
+  //           }
+            
+  //           // Update the detection with the cleaned result
+  //           detection.detectionResults = cleanedResult;
+  //           detection.textSummary = result.textSummary;
+  //           detection.visualizationUrl = visualizationUrl;
+  //           detection.status = 'completed';
+  //           await detection.save();
+  //         } catch (err) {
+  //           console.error('Error processing detection results:', err);
+  //           detection.status = 'failed';
+  //           detection.errorMessage = 'Error processing detection results: ' + err.message;
+  //           await detection.save();
+  //           return;
+  //         }
+  
+  //         // Find nearby officials
+  //         const nearbyOfficials = await Official.find({
+  //           isOnDuty: true,
+  //           dutyLocation: {
+  //             $near: {
+  //               $geometry: {
+  //                 type: 'Point',
+  //                 coordinates: [parseFloat(longitude), parseFloat(latitude)]
+  //               },
+  //               $maxDistance: 5000 // 5 km radius
+  //             }
+  //           },
+  //           phoneNumber: { $ne: null } // Only officials with phone numbers
+  //         });
+  
+  //         console.log("nearby:", nearbyOfficials.length, "officials");
+          
+  //         // Notify officials with the detailed text summary
+  //         const notifiedOfficials = [];
+  //         // for (const official of nearbyOfficials) {
+  //           try {
+  //             // Create notification link for SMS
+  //             const official=nearbyOfficials[0];
+  //             const detectionLink = `${process.env.FRONTEND_URL}/official/detection/${detection._id}`;
+              
+  //             // Format SMS message - Keep it brief for SMS character limits
+  //             let message = `🚨 Traffic Alert: ${cleanedResult.totalVehicles} vehicles detected. ${
+  //               cleanedResult.potentialEmergencyVehicles > 0 ? 
+  //               cleanedResult.potentialEmergencyVehicles + ' possible emergency vehicles. ' : ''
+  //             }`;
+              
+  //             // Add accident info if applicable
+  //             if (detection.isAccident) {
+  //               message = `🚑 ACCIDENT ALERT: ${message} Medical attention needed.`;
+  //             }
+              
+  //             message += `Details: ${detectionLink}`;
+              
+  //             console.log("Sending SMS to", official.phoneNumber);
+              
+  //             // Send SMS notification
+  //             const smsResponse = await sendWhatsAppNotification(official.phoneNumber, message);
+  
+  //             console.log("SMS sent, SID:", smsResponse.sid);
+              
+  //             // Save notification record
+  //             const notification = new Notification({
+  //               detection: detection._id,
+  //               official: official._id,
+  //               smsMessageSid: smsResponse.sid,
+  //               notificationText: message,
+  //               status: 'sent'
+  //             });
+              
+  //             await notification.save();
+  //             notifiedOfficials.push(official._id);
+  //           } catch (err) {
+  //             console.error(`Failed to notify official ${official._id}:`, err);
+  //           }
+  //         // }
+  
+  //         // Update detection with notified officials
+  //         detection.notifiedOfficials = notifiedOfficials;
+  //         await detection.save();
+          
+  //         // Clean up temp file after processing
+  //         if (fs.existsSync(req.file.path)) {
+  //           fs.unlinkSync(req.file.path);
+  //         }
+  //       })
+  //       .catch(async (err) => {
+  //         console.error('YOLOv8 detection failed:', err);
+  //         detection.status = 'failed';
+  //         detection.errorMessage = err.message;
+  //         await detection.save();
+          
+  //         // Clean up temp file on error
+  //         if (fs.existsSync(req.file.path)) {
+  //           fs.unlinkSync(req.file.path);
+  //         }
+  //       });
+  
+  //   } catch (err) {
+  //     console.error(err.message);
+      
+  //     // Clean up temp file on error
+  //     if (req.file && fs.existsSync(req.file.path)) {
+  //       fs.unlinkSync(req.file.path);
+  //     }
+      
+  //     res.status(500).send('Server error');
+  //   }
+  // };
+  
+  // Mark notification as read
+
+
+
+
+
+
+// // Reject a detection task
+// exports.rejectTask = async (req, res) => {
+  //   try {
+    //     const { detectionId } = req.params;
+    //     const officialId = req.official.id;
+    
+    //     const detection = await Detection.findById(detectionId);
+    
+    //     if (!detection) {
+      //       return res.status(404).json({ msg: 'Detection not found' });
+//     }
+
+//     // Check if the task is already accepted by this official
+//     if (detection.acceptedBy && detection.acceptedBy.toString() === officialId) {
+  //       return res.status(400).json({ 
+    //         msg: 'You have already accepted this task. Please release it first.' 
+    //       });
+    //     }
+    
+    //     // Add official to rejected list if not already there
+    //     if (!detection.rejectedBy) {
+      //       detection.rejectedBy = [];
+      //     }
+      
+      //     if (!detection.rejectedBy.includes(officialId)) {
+        //       detection.rejectedBy.push(officialId);
+//     }
+
+//     await detection.save();
+
+//     // Update the notification status
+//     const notification = await Notification.findOne({ 
+  //       detection: detectionId,
+  //       official: officialId
+  //     });
+  
+  //     if (notification) {
+    //       notification.status = 'rejected';
+    //       await notification.save();
+    //     }
+    
+    //     // Find the next nearest official to notify
+    //     await notifyNextNearestOfficial(detection);
+    
+    //     res.json({ 
+      //       msg: 'Task rejected successfully',
+//       detection
+//     });
+
+//   } catch (err) {
+  //     console.error(err.message);
+  //     res.status(500).send('Server error');
+  //   }
+  // };
+  
+  
+
+
+
+//changes
+// Add these functions to your detectionController.js
+
+// // Accept a detection task
+// exports.acceptTask = async (req, res) => {
+  //   try {
+//     const { detectionId } = req.params;
+//     const officialId = req.official.id;
+
+//     const detection = await Detection.findById(detectionId);
+
+//     if (!detection) {
+  //       return res.status(404).json({ msg: 'Detection not found' });
+//     }
+
+//     // Check if the detection is already accepted by someone else
+//     if (detection.acceptedBy && detection.acceptedBy.toString() !== officialId) {
+  //       return res.status(400).json({ 
+    //         msg: 'This task has already been accepted by another official' 
+    //       });
+    //     }
+    
+    //     // Check if the official previously rejected this task
+    //     if (detection.rejectedBy && detection.rejectedBy.includes(officialId)) {
+      //       return res.status(400).json({ 
+        //         msg: 'You previously rejected this task and cannot accept it now' 
+//       });
+//     }
+    
+//     // Update detection with the accepting official
+//     detection.acceptedBy = officialId;
+//     detection.taskStatus = 'accepted';
+//     await detection.save();
+
+//     // Update the notification status
+//     const notification = await Notification.findOne({ 
+  //       detection: detectionId,
+//       official: officialId
+//     });
+
+//     if (notification) {
+  //       notification.status = 'accepted';
+  //       await notification.save();
+  //     }
+  
+  //     res.json({ 
+    //       msg: 'Task accepted successfully',
+    //       detection
+    //     });
+    
+    //   } catch (err) {
+      //     console.error(err.message);
+      //     res.status(500).send('Server error');
+      //   }
+// };
+
